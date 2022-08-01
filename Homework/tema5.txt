@@ -1,0 +1,292 @@
+1. Mențineți într-o colecție codurile celor mai prost plătiți 5 angajați care nu câștigă comision. Folosind această colecție măriți cu 5% 
+salariul acestor angajați. Afișați valoarea veche a salariului, respectiv valoarea nouă a salariului.
+
+set serveroutput on
+DECLARE
+    TYPE vector IS VARRAY(6) OF NUMBER; 
+    v vector := vector();
+BEGIN
+    with c as ( select employee_id
+                from emp_TMC
+                where commission_pct is null
+                order by salary)        
+    select *
+    BULK COLLECT INTO v
+    from c
+    where rownum < 6;
+    
+    DBMS_OUTPUT.PUT_LINE('Salariul vechi : ');
+    FOR i IN v.first..v.last 
+      LOOP
+        FOR elem IN (select salary
+                     from emp_TMC
+                     where employee_id = v(i))
+          LOOP
+              DBMS_OUTPUT.PUT_LINE('  ' || elem.salary);
+          END LOOP;
+    END LOOP;
+      
+   FOR i IN v.first..v.last 
+      LOOP
+        update emp_TMC
+        set salary = salary + 0.05 * salary
+        where employee_id = v(i);
+      END LOOP;  
+    
+    DBMS_OUTPUT.PUT_LINE('Salariul nou : ');
+    FOR i IN v.first..v.last 
+      LOOP
+        FOR elem IN (select salary
+                     from emp_TMC
+                     where employee_id = v(i))
+          LOOP
+              DBMS_OUTPUT.PUT_LINE('  ' || elem.salary);
+          END LOOP;
+    END LOOP;
+END;
+
+2. Definiți un tip colecție denumit tip_orase_***. Creați tabelul excursie_*** cu următoarea structură: cod_excursie NUMBER(4), 
+denumire VARCHAR2(20), orase tip_orase_*** (ce va conține lista orașelor care se vizitează într-o excursie, într-o ordine stabilită; 
+de exemplu, primul oraș din listă va fi primul oraș vizitat), status (disponibilă sau anulată).
+
+a. Inserați 5 înregistrări în tabel.
+b. Actualizați coloana orase pentru o excursie specificată:
+- adăugați un oraș nou în listă, ce va fi ultimul vizitat în excursia respectivă;
+- adăugați un oraș nou în listă, ce va fi al doilea oraș vizitat în excursia respectivă;
+- inversați ordinea de vizitare a două dintre orașe al căror nume este specificat;
+- eliminați din listă un oraș al cărui nume este specificat.
+c. Pentru o excursie al cărui cod este dat, afișați numărul de orașe vizitate, respectiv numele orașelor.
+d. Pentru fiecare excursie afișați lista orașelor vizitate.
+e. Anulați excursiile cu cele mai puține orașe vizitate.
+
+create or replace TYPE tip_orase_TMC AS VARRAY(20) OF VARCHAR(100);
+/
+create table excursie_TMC (
+        cod_excursie NUMBER(4),
+        denumire VARCHAR2(20),
+        orase tip_orase_TMC,
+        status VARCHAR2(15) );
+
+set serveroutput on
+DECLARE
+      cities tip_orase_TMC := tip_orase_TMC('Bucuresti','Roma','Nice','Buzau','Manchester');
+      excursii excursie_TMC.orase%type;
+      id_exc number(2) := '&exc_cod';
+      aux1 varchar(25); aux2 varchar(25);
+      poz1 number(2); poz2 number(2); minim number(4) := 1000;
+BEGIN
+      --a)
+      insert into excursie_TMC values (1, 'Muzee', cities,'Disponibila');  
+      insert into excursie_TMC values (2, 'Case memoriale', tip_orase_TMC('Bucuresti','Cluj','Sebes','Iasi'),'Anulata');
+      insert into excursie_TMC values (3, 'Castele', tip_orase_TMC('Brasov','Berlin','Balcic','Hunedoara'),'Anulata');
+      insert into excursie_TMC values (4, 'Delte', tip_orase_TMC('Sulina','Chilia Veche','Kazan'),'Anulata');
+      insert into excursie_TMC values (5, 'Cetati', tip_orase_TMC('Constanta','Sebes','Sighisoara'),'Disponibila');
+
+      --b)
+      select orase
+      into excursii 
+      from excursie_TMC 
+      where cod_excursie = id_exc; 
+      excursii.extend; excursii(excursii.last) := 'Paris';  --se viziteaza ultimul
+      
+      update excursie_TMC
+      set orase = excursii
+      where cod_excursie = id_exc; --actualizez coloana orase
+  
+      excursii.extend;    --adaug un nou oras la finalul listei si il schimb cu cel aflat pe pozitia 2, pentru a fi vizitat al doilea in respectiva excursie
+      excursii(excursii.last) := 'Lisabona';
+      aux1 := excursii(2);                  
+      excursii(2) := excursii(excursii.last);
+      excursii(excursii.last) := aux1;
+      
+      update excursie_TMC
+      set orase = excursii
+      where cod_excursie = id_exc; --actualizez coloana orase
+      
+      --inversare orase
+      aux1 := '&Oras1'; aux2 := '&Oras2';
+      FOR i IN excursii.FIRST..excursii.LAST 
+        LOOP
+          IF excursii(i)=aux1 then poz1:=i; END IF;
+          IF excursii(i)=aux2 then poz2:=i; END IF;
+        END LOOP;
+      aux1 := excursii(poz1); 
+      excursii(poz1) := excursii(poz2); 
+      excursii(poz2) := aux1; 
+      
+      update excursie_TMC
+      set orase = excursii
+      where cod_excursie = id_exc; --actualizez coloana orase
+            
+      --stergere oras
+      aux1 := '&Oras_Sterg';
+      FOR i IN excursii.FIRST..excursii.LAST 
+        LOOP
+            IF excursii(i) = aux1 then FOR j IN i..excursii.last-1 LOOP excursii(j) := excursii(j+1); END LOOP; END IF;
+        END LOOP;
+      excursii(excursii.last) := null;
+      
+      update excursie_TMC
+      set orase = excursii
+      where cod_excursie = id_exc; --actualizez coloana orase
+      
+        --c)
+      select orase
+      into excursii 
+      from excursie_TMC 
+      where cod_excursie='&exc_cod'; 
+      DBMS_OUTPUT.PUT_LINE(excursii.count - 1);
+      FOR i IN excursii.FIRST..excursii.LAST 
+        LOOP
+            DBMS_OUTPUT.PUT(excursii(i) || ' '); 
+        END LOOP;
+      DBMS_OUTPUT.NEW_LINE; DBMS_OUTPUT.NEW_LINE;
+        
+      --d)
+      FOR i in 1..5 
+        LOOP
+          select orase
+          into excursii 
+          from excursie_TMC
+          where cod_excursie = i;
+          FOR j IN excursii.FIRST..excursii.LAST 
+              LOOP DBMS_OUTPUT.PUT(excursii(j) || ' ');  END LOOP;    
+          DBMS_OUTPUT.NEW_LINE;
+        END LOOP;
+      
+      DBMS_OUTPUT.NEW_LINE;
+      --e)
+      FOR i in 1..5 
+        LOOP
+          select orase
+          into excursii 
+          from excursie_TMC
+          where cod_excursie = i;
+          IF excursii.count < minim then minim := excursii.count; END IF;
+        END LOOP;
+
+    FOR i in 1..5
+      LOOP
+        select orase
+        into excursii 
+        from excursie_TMC
+        where cod_excursie = i;
+        IF excursii.count = minim then DBMS_OUTPUT.PUT_LINE('Anulata'); END IF;
+      END LOOP;
+END;
+
+3. Rezolvați problema anterioară folosind un alt tip de colecție studiat.
+
+create or replace TYPE tip_orase_TMC IS TABLE OF VARCHAR(25); 
+/
+create table excursie_TMC (
+        cod_excursie NUMBER(4),
+        denumire VARCHAR2(20),
+        status VARCHAR2(15) );
+        
+ALTER TABLE excursie_TMC 
+ADD (orase tip_orase_TMC) 
+NESTED TABLE orase STORE AS lista_orase_TMC;
+
+set serveroutput on
+DECLARE
+      excursii excursie_TMC.orase%type;
+      id_exc number(2) := '&exc_cod';
+      aux1 varchar(25); aux2 varchar(25);
+      poz1 number(2); poz2 number(2); minim number(4) := 1000;
+BEGIN
+      --a)
+        insert into excursie_TMC values (1, 'Muzee', 'Disponibila', tip_orase_TMC('Bucuresti','Roma','Nice','Buzau','Manchester'));  
+        insert into excursie_TMC values (2, 'Case memoriale', 'Anulata', tip_orase_TMC('Bucuresti','Cluj','Sebes','Iasi'));
+        insert into excursie_TMC values (3, 'Castele', 'Anulata', tip_orase_TMC('Brasov','Berlin','Balcic','Hunedoara'));
+        insert into excursie_TMC values (4, 'Delte', 'Anulata', tip_orase_TMC('Sulina','Chilia Veche','Kazan'));
+        insert into excursie_TMC values (5, 'Cetati', 'Disponibila', tip_orase_TMC('Constanta','Sebes','Sighisoara'));
+
+      --b)
+          select orase
+          into excursii 
+          from excursie_TMC 
+          where cod_excursie = id_exc; 
+          excursii.extend; excursii(excursii.last) := 'Paris';  --se viziteaza ultimul
+            
+          update excursie_TMC
+          set orase = excursii
+          where cod_excursie = id_exc; --actualizez coloana orase
+      
+          excursii.extend;    --adaug un nou oras la finalul listei si il schimb cu cel aflat pe pozitia 2, pentru a fi vizitat al doilea in respectiva excursie
+          excursii(excursii.last) := 'Lisabona';
+          aux1 := excursii(2);                  
+          excursii(2) := excursii(excursii.last);
+          excursii(excursii.last) := aux1;
+          
+          update excursie_TMC
+          set orase = excursii
+          where cod_excursie = id_exc; --actualizez coloana orase
+          
+          --inversare orase
+          aux1 := '&Oras1'; aux2 := '&Oras2';
+          FOR i IN excursii.FIRST..excursii.LAST 
+            LOOP
+              IF excursii(i)=aux1 then poz1:=i; END IF;
+              IF excursii(i)=aux2 then poz2:=i; END IF;
+            END LOOP;
+          aux1 := excursii(poz1); 
+          excursii(poz1) := excursii(poz2); 
+          excursii(poz2) := aux1; 
+          
+          update excursie_TMC
+          set orase = excursii
+          where cod_excursie = id_exc; --actualizez coloana orase
+            
+          --stergere oras
+          aux1 := '&Oras_Sterg';
+          FOR i IN excursii.FIRST..excursii.LAST 
+            LOOP IF excursii(i) = aux1 then poz1 := i; END IF; END LOOP;
+          excursii.delete(poz1);
+          
+          update excursie_TMC
+          set orase = excursii
+          where cod_excursie = id_exc; --actualizez coloana orase
+          
+        --c)
+          select orase
+          into excursii 
+          from excursie_TMC 
+          where cod_excursie='&exc_cod'; 
+          DBMS_OUTPUT.PUT_LINE(excursii.count);
+          FOR i IN excursii.FIRST..excursii.LAST 
+            LOOP DBMS_OUTPUT.PUT(excursii(i) || ' '); END LOOP;
+          DBMS_OUTPUT.NEW_LINE; DBMS_OUTPUT.NEW_LINE;
+            
+      --d)
+          FOR i in 1..5 
+            LOOP
+              select orase
+              into excursii 
+              from excursie_TMC
+              where cod_excursie = i;
+              FOR j IN excursii.FIRST..excursii.LAST 
+                  LOOP DBMS_OUTPUT.PUT(excursii(j) || ' ');  END LOOP;    
+              DBMS_OUTPUT.NEW_LINE;
+            END LOOP;
+          
+            DBMS_OUTPUT.NEW_LINE;
+            --e)
+            FOR i in 1..5 
+              LOOP
+                select orase
+                into excursii 
+                from excursie_TMC
+                where cod_excursie = i;
+                IF excursii.count < minim then minim := excursii.count; END IF;
+              END LOOP;
+      
+            FOR i in 1..5
+              LOOP
+                select orase
+                into excursii 
+                from excursie_TMC
+                where cod_excursie = i;
+                IF excursii.count = minim then DBMS_OUTPUT.PUT_LINE('Anulata'); END IF;
+              END LOOP;
+END;

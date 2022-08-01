@@ -1,0 +1,56 @@
+7. 
+a. Câte exemplare au statusul eronat?
+
+with exemplare as (select act_ret_date,status
+                  from title_copy tc,rental r
+                  where tc.copy_id = r.copy_id and tc.title_id=r.title_id)
+select count(*) Numar_exemplare
+from exemplare
+where (act_ret_date is null and status='AVAILABLE') or (act_ret_date is not null and status='RENTED');
+
+b. Setați statusul corect pentru toate exemplarele care au statusul eronat. Salvați actualizările realizate.
+
+create table title_copy_TMC as (select * from title_copy);
+select act_ret_date,status,case
+                             when act_ret_date is null and status = 'AVAILABLE' then 'RENTED'
+                             when act_ret_date is not null and status = 'RENTED' then 'AVAILABLE'
+                             else status
+                           end Status_corect
+from title_copy_TMC tc,rental r
+where tc.copy_id = r.copy_id and tc.title_id=r.title_id;
+
+8. Toate filmele rezervate au fost împrumutate la data rezervării? Afișați textul “Da” sau ”Nu” în funcție de situație.
+
+select book_date,res_date,case
+                            when res_date > book_date then 'DA'
+                            else 'NU'
+                          end Amanare_data_ridicare
+from rental r,reservation rs
+where r.member_id=rs.member_id and r.title_id=rs.title_id;
+
+9. De câte ori a împrumutat un membru (nume și prenume) fiecare film (titlu)?
+
+with nr_exp as (select member_id,title_id,count(*) cate
+                from rental
+                group by member_id,title_id
+                order by 1)
+select first_name,last_name,t.title,cate
+from nr_exp nre,member m,title t
+where nre.member_id=m.member_id and nre.title_id=t.title_id;
+
+10. De câte ori a împrumutat un membru (nume și prenume) fiecare exemplar (cod) al unui film (titlu)?
+
+with exemplare as (select member_id, title_id, copy_id, count(*) cate
+                   from rental
+                   group by member_id, title_id, copy_id)
+select first_name, last_name,t.title, copy_id, exemplare.cate
+from exemplare,member m,title t
+where exemplare.member_id=m.member_id and exemplare.title_id=t.title_id;
+
+
+
+
+
+
+
+

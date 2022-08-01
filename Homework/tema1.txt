@@ -1,0 +1,23 @@
+16. Afişaţi numele tuturor tabelelor personale create (nume_tabel_***).
+
+select table_name
+from user_tables
+where table_name like '_TMC%';
+
+22. Fără să rulaţi scriptul creat daţi exemplu de un caz în care execuţia acestui script 
+va determina erori. Indicaţi o metodă de rezolvare a acestui caz.
+
+Un exemplu bun de eroare ar fi cazul in care un tabel este referentiat de alt tabel prin intermediul unui FK si 
+pentru a rezolva se adauga clauza 'cascade constraint' la finalul query-ului
+
+23.Folosind tabelul departments generaţi automat script-ul SQL de inserare a înregistrărilor 
+în acest tabel.
+
+spool C:\Users\Mihai\Desktop\insertion.txt;
+SELECT
+ 'INSERT INTO departments VALUES
+  (' || department_id || ', ''' || department_name ||
+   ''', ' || location_id || ');'
+  AS "Inserare date"
+FROM   departments;
+spool off;

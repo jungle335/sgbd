@@ -1,0 +1,120 @@
+1. Definiti tipul de inregistrare job_record ce contine campurile: job_id, job_title, avg_salary. Apoi definiti o variabila de 
+acest tip.
+a. Initializati variabila respectiva cu valori arbitrare si afisati valorile campurilor.
+b. Initializati variabila cu valorile corespunzatoare job-ului cu id-ul IT_PROG (campul avg_salary va fi initializat cu media aritmetica
+dintre min_salary si max_salary al job-ului respectiv). Afisati valorile campurilor variabilei.
+c. Stergeti job-ul cu id-ul ST_MAN din tabelul jobs_*** (creati inainte tabelul jobs_*** unde *** trebuie inlocuite cu initialele 
+voastre) si retineti in variabila definite anterior informatiile corespunzatoare acestui job. Anulati modificarile realizate.
+
+set serveroutput on;
+DECLARE
+    TYPE job_record IS RECORD
+          (job_id jobs.job_id % TYPE,
+           job_title jobs.job_title % TYPE,
+           avg_salary jobs.max_salary % TYPE);
+    job_obj job_record;
+BEGIN
+      --a)
+      job_obj.job_id := 'SA_REP';
+      job_obj.job_title := 'Sales Representative';
+      job_obj.avg_salary := 1200; 
+      DBMS_OUTPUT.PUT_LINE ('Jobul cu id-ul ' || job_obj.job_id || ' se numeste ' || job_obj.job_title || ' si are salariul mediu ' || job_obj.avg_salary);
+      --b)
+      job_obj.job_id := 'IT_PROG';
+      select job_title, (min_salary + max_salary) / 2
+      into job_obj.job_title, job_obj.avg_salary 
+      from jobs
+      where job_id = job_obj.job_id;
+      DBMS_OUTPUT.PUT_LINE ('Jobul cu id-ul ' || job_obj.job_id || ' se numeste ' || job_obj.job_title || ' si are salariul mediu ' || job_obj.avg_salary);
+      --c)
+      delete 
+      from jobs_TMC
+      where job_id = 'ST_MAN';
+      job_obj.job_id := 'ST_MAN';
+      select job_title, (min_salary + max_salary) / 2
+      into job_obj.job_title, job_obj.avg_salary 
+      from jobs
+      where job_id = job_obj.job_id;
+      DBMS_OUTPUT.PUT_LINE ('Jobul cu id-ul ' || job_obj.job_id || ' se numeste ' || job_obj.job_title || ' si are salariul mediu ' || job_obj.avg_salary);
+      ROLLBACK;
+END;
+
+--pentru punctul c
+create table jobs_TMC as (select * from jobs);
+
+2. Definiti doua variabile cu aceeasi structura ca si tabelul emp_***. Initializati prima variabila cu datele angajatului ce 
+castiga salariul cel mai mare, si a doua variabila cu datele celui ce castiga cel mai mic salariu (trebuie sa va asigurati ca aceste 
+query-uri intorc un singur angajat chiar daca sunt mai multi in tabel cu acelasi salariu – minim sau maxim). In cazul in care 
+salariul angajatului mai prost platit valoreaza mai putin de 10% din salariul celui mai bine platit angajat, mariti salariul acestuia 
+cu 10%. Anulati modificarile realizate.
+
+DECLARE
+    TYPE angajat IS RECORD
+        (
+          aid emp_TMC.employee_id % type,
+          nume emp_TMC.first_name % type,
+          prenume emp_TMC.last_name % type,
+          posta emp_TMC.email % type,
+          numar emp_TMC.phone_number % type,
+          angajare emp_TMC.hire_date % type,
+          jid emp_TMC.job_id % type,
+          salariu emp_TMC.salary % type,
+          comision emp_TMC.commission_pct % type,
+          bossId emp_TMC.manager_id % type,
+          numarDep emp_TMC.department_id % type );
+    ang1 angajat; ang2 angajat;
+BEGIN
+    --cel mai bine platit angajat
+    select employee_id,first_name,last_name,email,phone_number,hire_date,job_id,salary,commission_pct,manager_id,department_id
+    into ang1.aid,ang1.nume,ang1.prenume,ang1.posta,ang1.numar,ang1.angajare,ang1.jid,ang1.salariu,ang1.comision,ang1.bossId,ang1.numarDep
+    from emp_TMC
+    where salary = (select max(salary)
+                    from employees) and rownum < 2;
+
+    --cel mai prost platit angajat
+    select employee_id,first_name,last_name,email,phone_number,hire_date,job_id,salary,commission_pct,manager_id,department_id
+    into ang2.aid,ang2.nume,ang2.prenume,ang2.posta,ang2.numar,ang2.angajare,ang2.jid,ang2.salariu,ang2.comision,ang2.bossId,ang2.numarDep
+    from emp_TMC
+    where salary = (select min(salary)
+                    from employees) and rownum < 2; 
+    IF ang2.salariu < ang1.salariu - 0.1 * ang1.salariu
+                  THEN  update emp_TMC
+                        set salary = salary + 0.1 * ang2.salariu
+                        where employee_id = ang2.aid;
+    END IF;
+    ROLLBACK;
+END;
+
+3. Declarati doua variabile cu aceeasi structura ca si tabelul dept_*** (in caz ca nu exista creati tabelul).
+a. Initializati prima variabila cu urmatoarele valori: (department_id: 300, department_name: ‘Research’, manager_id: 103, location_id: 1700). Inserati informatiile din 
+prima variabila in tabelul dept_***.
+b. Stergeti din tabelul dept_*** department-ul cu id-ul 50 mentinand valorile sterse in cea de-a doua variabila declarata. Afisati informatiile departamentului sters si anulati 
+modificarile realizate.
+
+DECLARE
+    TYPE departament IS RECORD
+        (
+          did dep_TMC.department_id % type,
+          nume dep_TMC.department_name % type,
+          bossId dep_TMC.manager_id % type,
+          locDep dep_TMC.location_id % type );
+    dep1 departament; dep2 departament;
+BEGIN
+    --a)
+    dep1.did := 300;
+    dep1.nume := 'Research';
+    dep1.bossId := 103;
+    dep1.locDep := 1700;
+    insert into dep_TMC values(dep1.did,dep1.nume,dep1.bossId,dep1.locDep);
+    
+    --b)
+    select department_id,department_name,manager_id,location_id
+    into dep2.did,dep2.nume,dep2.bossId,dep2.locDep
+    from dep_TMC
+    where department_id = 50;
+    delete
+    from dep_TMC
+    where department_id = 50;
+    DBMS_OUTPUT.PUT_LINE('Departamentul sters este : {' || 'Id : ' || dep2.did || ', Nume : ' || dep2.nume ||  ', Boss : ' || dep2.bossId || ' , Locatia : ' || dep2.locDep || ' }');
+    ROLLBACK; 
+END;

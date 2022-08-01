@@ -1,0 +1,99 @@
+1. Definiți un declanșator care să permită ștergerea informațiilor din tabelul dept_*** decât dacă utilizatorul este SCOTT.
+
+create table dept_TMC as (select * from departments);
+
+CREATE OR REPLACE TRIGGER myTrigger 
+  BEFORE DELETE ON dept_TMC 
+DECLARE 
+  currentUser varchar2(50);
+BEGIN 
+  select sys_context('userenv', 'current_user')
+  into currentUser
+  from dual;
+  
+  IF currentUser <> 'Scott' THEN RAISE_APPLICATION_ERROR(-20002, 'Ups! Nu aveti dreptul de a sterge informatii din acest tabel.'); 
+  END IF;
+END;
+/
+
+delete from dept_TMC
+where department_id = 90;
+
+2. Creați un declanșator prin care să nu se permită mărirea comisionului astfel încât să depășească 50% din valoarea salariului.
+
+CREATE OR REPLACE TRIGGER myTrigger 
+  BEFORE UPDATE OF commission_pct ON emp_TMC
+  FOR EACH ROW
+BEGIN
+  IF :NEW.commission_pct > 0.5 THEN RAISE_APPLICATION_ERROR(-20002, 'Ups! Comision prea mare!!!');
+  END IF;
+END;
+/
+
+update emp_TMC
+set commission_pct = 0.6;
+
+3. 
+a. Introduceți în tabelul info_dept_*** coloana numar care va reprezenta pentru fiecare departament numărul de angajați care lucrează în departamentul respectiv. Populați cu date această coloană pe baza informațiilor din schemă.
+b. Definiți un declanșator care va actualiza automat această coloană în funcție de actualizările realizate asupra tabelului info_emp_***.
+
+create table info_dept_TMC (
+  id NUMBER NOT NULL PRIMARY KEY,
+  nume_dept VARCHAR2(30) NOT NULL,
+  plati NUMBER
+);
+
+ALTER TABLE info_dept_TMC
+ADD Numar Number;
+
+a) 
+DECLARE
+  dep_nume varchar2(30);
+  nr NUMBER; 
+  suma NUMBER;
+  id NUMBER := 1;
+BEGIN
+    FOR i in (select department_name dep_nume, sum(e.salary) suma, count(*) nr
+              from employees e, departments d
+              where e.department_id is not null and e.department_id = d.department_id
+              group by department_name) LOOP
+              insert into info_dept_TMC values (id, i.dep_nume, i.suma, i.nr);
+              id := id + 1;
+    END LOOP;
+END;
+
+b)
+CREATE OR REPLACE
+PROCEDURE modif_nr(
+    dep_id departments.department_id % TYPE,
+    id info_dept_TMC.id % TYPE)
+IS dep_nume departments.department_name % TYPE;
+BEGIN
+    select department_name
+    into dep_nume
+    from departments
+    where department_id = dep_id;
+    IF id = 1 THEN
+        UPDATE info_dept_TMC 
+        SET numar = numar + 1  
+        WHERE nume_dept = dep_nume;
+    ELSE 
+        UPDATE info_dept_TMC 
+        SET numar = numar - 1  
+        WHERE nume_dept = dep_nume;
+    END IF;
+END;
+/
+
+CREATE OR REPLACE TRIGGER myTrigger AFTER
+  INSERT OR DELETE OR UPDATE OF department_id ON emp_TMC 
+  FOR EACH ROW 
+BEGIN 
+    IF INSERTING THEN modif_nr(:NEW.department_id, 1);
+    ELSIF DELETING THEN modif_nr(:OLD.department_id, 2);
+    END IF;
+END;
+/
+
+delete from emp_TMC
+where employee_id = 101;

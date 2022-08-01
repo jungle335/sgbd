@@ -1,0 +1,200 @@
+1. Creați tabelul info_*** cu următoarele coloane:
+- utilizator (numele utilizatorului care a inițiat o comandă)
+- data (data și timpul la care utilizatorul a inițiat comanda)
+- comanda (comanda care a fost inițiată de utilizatorul respectiv)
+- nr_linii (numărul de linii selectate/modificate de comandă)
+- eroare (un mesaj pentru excepții).
+
+create table info_TMC (
+      utilizator varchar(25), 
+      data date, 
+      comanda varchar(256), 
+      nr_linii number, 
+      eroare varchar(50));
+
+2. Modificați funcția definită la exercițiul 2, respectiv procedura definită la exercițiul 4 astfel încât să determine inserarea în 
+tabelul info_*** a informațiile corespunzătoare fiecărui caz determinat de valoarea dată pentru parametru:
+- există un singur angajat cu numele specificat;
+- există mai mulți angajați cu numele specificat;
+- nu există angajați cu numele specificat.
+
+DECLARE
+  nrL number;
+  sql_comm varchar(256);
+  PROCEDURE get_Nume (nume IN employees.last_name%TYPE, nrL OUT number)
+  IS
+  BEGIN
+      select rownum
+      into nrL
+      from employees
+      where last_name = nume
+      order by 1 desc;
+      
+      select ( select t2.sql_text
+               from   v$sql t2
+               where  t1.prev_sql_id = t2.sql_id and t1.prev_child_number = t2.child_number) sql_text
+      into sql_comm
+      from   v$session t1
+      where  t1.audsid = Sys_context('userenv', 'sessionid'); 
+      
+      IF nrL = 1 THEN DBMS_OUTPUT.PUT_LINE('Exista un singur angajat cu numele specificat');
+                      insert into info_TMC values (user, sysdate, sql_comm, nrL, 'Exista un singur angajat cu numele specificat');
+      END IF;
+
+      EXCEPTION
+          WHEN NO_DATA_FOUND THEN select ( select t2.sql_text
+                                           from   v$sql t2
+                                           where  t1.prev_sql_id = t2.sql_id and t1.prev_child_number = t2.child_number) sql_text
+                                  into sql_comm
+                                  from   v$session t1
+                                  where  t1.audsid = Sys_context('userenv', 'sessionid'); 
+                                  
+                                  DBMS_OUTPUT.PUT_LINE('Nu exista angajati cu numele specificat');
+                                  insert into info_TMC values (user, sysdate, sql_comm, 0, 'Nu exista angajati cu numele specificat');
+                                  
+          WHEN TOO_MANY_ROWS THEN select ( select t2.sql_text
+                                           from   v$sql t2
+                                           where  t1.prev_sql_id = t2.sql_id and t1.prev_child_number = t2.child_number) sql_text
+                                  into sql_comm
+                                  from   v$session t1
+                                  where  t1.audsid = Sys_context('userenv', 'sessionid'); 
+                                  
+                                  DBMS_OUTPUT.PUT_LINE('Exista mai multi angajati cu numele specificat');
+                                  insert into info_TMC values (user, sysdate, sql_comm, nrL, 'Exista mai multi angajati cu numele specificat');
+  END get_Nume;
+  
+BEGIN 
+  get_Nume('&Nume', nrL);
+END; 
+/
+
+3. Definiți o funcție stocată care determină numărul de angajați care au avut cel puțin 2 joburi diferite și care în prezent lucrează într-un oraș
+dat ca parametru. Tratați cazul în care orașul dat ca parametru nu există, respectiv cazul în care în orașul dat nu lucrează niciun angajat. 
+Inserați în tabelul info_*** informațiile corespunzătoare fiecărui caz determinat de valoarea dată pentru parametru.
+
+DECLARE
+  rez number;
+  sql_comm varchar2(255);
+  PROCEDURE nr_ang (nume locations.city%type) 
+  IS
+  BEGIN
+      select count(*) 
+      into rez
+      from locations 
+      where city = nume;
+      
+      select ( select t2.sql_text
+               from   v$sql t2
+               where  t1.prev_sql_id = t2.sql_id and t1.prev_child_number = t2.child_number) sql_text
+      into sql_comm
+      from   v$session t1
+      where  t1.audsid = Sys_context('userenv', 'sessionid'); 
+      
+      IF rez = 0 THEN  insert into info_TMC values (user, sysdate, sql_comm, 0, 'Orasul specificat nu exista!'); 
+                       RETURN ;
+      END IF;
+      
+      select count(*) 
+      into rez
+      from ( select employee_id, department_id 
+             from job_history 
+             group by employee_id, department_id) ang, departments d, locations l
+      where ang.department_id = d.department_id and d.location_id = l.location_id and l.city = nume;
+      
+      select ( select t2.sql_text
+               from   v$sql t2
+               where  t1.prev_sql_id = t2.sql_id and t1.prev_child_number = t2.child_number) sql_text
+      into sql_comm
+      from   v$session t1
+      where  t1.audsid = Sys_context('userenv', 'sessionid'); 
+      
+      IF rez = 0 THEN insert into info_TMC values (user, sysdate, sql_comm, 0, 'Nu avem niciun angajat in orasul specificat!');
+      ELSE insert into info_TMC values (user, sysdate, sql_comm, rez, 'Lucreaza ' || to_char(rez) || ' angajati');
+      END IF;
+  END;
+  
+BEGIN 
+  nr_ang('&Nume');
+END; 
+/
+
+4. Definiți o procedură stocată care mărește cu 10% salariile tuturor angajaților conduși direct sau indirect de către un 
+manager al cărui cod este dat ca parametru. Tratați cazul în care nu există niciun manager cu codul dat. 
+Inserați în tabelul info_*** informațiile corespunzătoare fiecărui caz determinat de valoarea dată pentru parametru.
+
+set serveroutput on;
+DECLARE
+TYPE vector IS VARRAY(400) OF VARCHAR2(120);
+  vect vector := vector();
+  sql_comm varchar(255);
+  copie number;
+  
+  PROCEDURE raise_sal (mng_id employees.manager_id%type)
+      IS 
+  BEGIN
+        select first_name 
+        bulk collect into vect
+        from employees
+        start with manager_id = mng_id 
+        connect by prior employee_id = manager_id;
+        
+        select ( select t2.sql_text
+               from   v$sql t2
+               where  t1.prev_sql_id = t2.sql_id and t1.prev_child_number = t2.child_number) sql_text
+        into sql_comm
+        from   v$session t1
+        where  t1.audsid = Sys_context('userenv', 'sessionid'); 
+        
+        IF vect.count = 0 THEN  DBMS_OUTPUT.PUT_LINE('Nu exista nici un manager cu id-ul specificat!');
+                                insert into info_TMC values (user, sysdate, sql_comm, 0, 'Nu exista nici un manager cu id-ul specificat!');
+        ELSE copie := vect.count;
+             FOR i in vect.first..vect.last LOOP
+                update emp_TMC
+                set salary = salary + 0.1 * salary
+                where first_name = vect(i);
+             END LOOP;
+             insert into info_TMC values (user, sysdate, sql_comm, copie, 'Am actualizat salariile!');
+        END IF;        
+  END ;
+  
+BEGIN 
+  raise_sal('&Id');
+END; 
+/
+
+5. Definiți un subprogram care obține pentru fiecare nume de departament ziua din săptămână în care au fost angajate cele mai multe 
+persoane, lista cu numele acestora, vechimea și venitul lor lunar. Afișați mesaje corespunzătoare următoarelor cazuri:
+- într-un departament nu lucrează niciun angajat;
+- într-o zi din săptămână nu a fost nimeni angajat.
+Observații:
+a. Numele departamentului și ziua apar o singură dată în rezultat.
+b. Rezolvați problema în două variante, după cum se ține cont sau nu de istoricul joburilor angajaților.
+
+set serveroutput on;
+DECLARE  
+  PROCEDURE afis_nume (num departments.department_name%type)
+      IS
+  BEGIN
+        for i in ( with maxi_ang as ( select day, dep_id, count(*) nr_ang 
+                   from( select to_char(hire_date, 'day') day, department_id dep_id from employees
+                         union all
+                         select to_char(start_date, 'day') day, department_id dep_id from job_history)
+                   where dep_id is not null
+                   group by day, dep_id)    
+        
+                   select distinct department_name, (  select day 
+                                                       from maxi_ang 
+                                                       where nr_ang = ( select max(nr_ang) 
+                                                                        from maxi_ang 
+                                                                        where dep_id = maxi.dep_id) and rownum < 2) day
+                    from maxi_ang maxi, departments
+                    where dep_id = department_id
+                    order by 1) LOOP
+                    DBMS_OUTPUT.PUT_LINE('(' || i.department_name || ' ' || i.day || ')');
+          END LOOP;
+  END ;
+  
+BEGIN 
+  afis_nume('num');
+END; 
+/

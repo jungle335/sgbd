@@ -1,0 +1,281 @@
+1. Pentru fiecare job (titlu – care va fi afișat o singură dată) obțineți lista angajaților (nume și salariu) care lucrează în prezent pe 
+jobul respectiv. Tratați cazul în care nu există angajați care să lucreze în prezent pe un anumit job. Rezolvați problema folosind:
+a. cursoare clasice
+b. ciclu cursoare
+c. ciclu cursoare cu subcereri
+d. expresii cursor
+
+--a)
+set serveroutput on;
+DECLARE
+     ante_job VARCHAR2(35) := ' ';
+     denumire jobs.job_title % type;
+     nume employees.first_name % type;
+     salariu employees.salary % type;
+     CURSOR c IS
+           select job_title, first_name, salary
+           from employees e, jobs j
+           where e.job_id = j.job_id (+)
+           order by 1;
+BEGIN
+    OPEN c;
+    LOOP
+        FETCH C INTO denumire, nume, salariu;
+        EXIT WHEN c % NOTFOUND;
+        if ante_job <> denumire then ante_job := denumire;  DBMS_OUTPUT.PUT_LINE(ante_job); end if;
+        DBMS_OUTPUT.PUT_LINE('     {Nume: ' || nume || ', Salariu: ' || salariu || '}');
+    END LOOP;
+    CLOSE c;
+END;
+
+--b)
+DECLARE
+     ante_job VARCHAR2(35) := ' ';
+     denumire jobs.job_title % type;
+     nume employees.first_name % type;
+     salariu employees.salary % type;
+     CURSOR c IS
+           select job_title denumire, first_name nume, salary salariu
+           from employees e, jobs j
+           where e.job_id = j.job_id (+)
+           order by 1;
+BEGIN
+    for i in c LOOP
+        if ante_job <> i.denumire then ante_job := i.denumire;  DBMS_OUTPUT.PUT_LINE(ante_job); end if;
+        DBMS_OUTPUT.PUT_LINE('     {Nume: ' || i.nume || ', Salariu: ' || i.salariu || '}');
+    END LOOP;
+END;
+
+--c)
+DECLARE
+     ante_job VARCHAR2(35) := ' ';
+     denumire jobs.job_title % type;
+     nume employees.first_name % type;
+     salariu employees.salary % type;
+BEGIN
+      for i in ( select job_title denumire, first_name nume, salary salariu
+                 from employees e, jobs j
+                 where e.job_id = j.job_id (+)
+                 order by 1) LOOP
+        if ante_job <> i.denumire then ante_job := i.denumire;  DBMS_OUTPUT.PUT_LINE(ante_job); end if;
+        DBMS_OUTPUT.PUT_LINE('     {Nume: ' || i.nume || ', Salariu: ' || i.salariu || '}');
+    END LOOP;
+END;
+
+2. Modificați exercițiul anterior astfel încât să obțineți și următoarele informații:
+- un număr de ordine pentru fiecare angajat care va fi resetat pentru fiecare job
+- pentru fiecare job
+           o numărul de angajați 
+           o valoarea lunară a veniturilor angajaților
+           o valoarea medie a veniturilor angajaților
+- indiferent job
+           o numărul total de angajați
+           o valoarea totală lunară a veniturilor angajaților
+           o valoarea medie a veniturilor angajaților
+
+set serveroutput on;
+DECLARE
+     cod jobs.job_title % type;
+     denumire jobs.job_title % type;
+     nr_ang number(4);
+     suma_sal employees.first_name % type;
+     venit_mediu employees.salary % type;
+     CURSOR c is 
+            select job_title, j.job_id, count(*), sum(salary), avg(salary)
+            from employees e, jobs j
+            where e.job_id = j.job_id
+            group by job_title, j.job_id
+            order by 1;
+BEGIN
+      --pentru fiecare job
+      OPEN c;
+      LOOP
+          FETCH c into denumire, cod, nr_ang, suma_sal, venit_mediu;
+          EXIT WHEN c % NOTFOUND;
+          DBMS_OUTPUT.PUT_LINE('{Denumire: ' || denumire || ', Numar angajati: ' || nr_ang || ', Salariu: ' || suma_sal || ', Venit Mediu: ' || venit_mediu || ')');
+          --numar de ordine
+          for i in (select rownum, first_name num 
+                    from (select * from employees 
+                          where job_id = cod)) LOOP
+              DBMS_OUTPUT.PUT_LINE('    ' || i.rownum || ' ' || i.num);
+          END LOOP;
+      END LOOP;
+      CLOSE c;
+      DBMS_OUTPUT.PUT_LINE(' ');
+      --indiferent de job
+      select count(*), sum(salary), avg(salary)
+      into nr_ang, suma_sal, venit_mediu
+      from employees;
+      DBMS_OUTPUT.PUT_LINE('Numarul angajatilor: ' || nr_ang);
+      DBMS_OUTPUT.PUT_LINE('Suma salariilor: ' || suma_sal);
+      DBMS_OUTPUT.PUT_LINE('Media salariilor: ' || venit_mediu);  
+END;
+
+--ciclu cursor
+DECLARE
+     cod jobs.job_title % type;
+     denumire jobs.job_title % type;
+     nr_ang number(4);
+     suma_sal employees.first_name % type;
+     venit_mediu employees.salary % type;
+     CURSOR c is 
+            select job_title denumire, j.job_id cod, count(*) nr_ang, sum(salary) suma_sal, avg(salary) venit_mediu
+            from employees e, jobs j
+            where e.job_id = j.job_id
+            group by job_title, j.job_id
+            order by 1;
+BEGIN
+      --pentru fiecare job
+      FOR i in c LOOP
+          DBMS_OUTPUT.PUT_LINE('{Denumire: ' || i.denumire || ', Numar angajati: ' || i.nr_ang || ', Salariu: ' || i.suma_sal || ', Venit Mediu: ' || i.venit_mediu || ')');
+          FOR j in (select rownum, first_name num 
+                    from (select * from employees 
+                          where job_id = i.cod)) LOOP
+              DBMS_OUTPUT.PUT_LINE('    ' || j.rownum || ' ' || j.num);
+          END LOOP;
+      END LOOP;
+      DBMS_OUTPUT.PUT_LINE(' ');
+      --indiferent de job
+      select count(*), sum(salary), avg(salary)
+      into nr_ang, suma_sal, venit_mediu
+      from employees;
+      DBMS_OUTPUT.PUT_LINE('Numarul angajatilor: ' || nr_ang);
+      DBMS_OUTPUT.PUT_LINE('Suma salariilor: ' || suma_sal);
+      DBMS_OUTPUT.PUT_LINE('Media salariilor: ' || venit_mediu);
+END;
+
+--ciclu cursor cu subcereri
+DECLARE
+     cod jobs.job_title % type;
+     denumire jobs.job_title % type;
+     nr_ang number(4);
+     suma_sal employees.first_name % type;
+     venit_mediu employees.salary % type;
+BEGIN
+      --pentru fiecare job
+        FOR i in (  select job_title denumire, j.job_id cod, count(*) nr_ang, sum(salary) suma_sal, avg(salary) venit_mediu
+                    from employees e, jobs j
+                    where e.job_id = j.job_id
+                    group by job_title, j.job_id
+                    order by 1) LOOP
+            DBMS_OUTPUT.PUT_LINE('{Denumire: ' || i.denumire || ', Numar angajati: ' || i.nr_ang || ', Salariu: ' || i.suma_sal || ', Venit Mediu: ' || i.venit_mediu || ')');
+            for j in (select rownum, first_name num 
+                      from (select * from employees 
+                            where job_id = i.cod)) LOOP
+              DBMS_OUTPUT.PUT_LINE('    ' || j.rownum || ' ' || j.num);
+          END LOOP;
+        END LOOP;
+        DBMS_OUTPUT.PUT_LINE(' ');
+        --indiferent de job
+        select count(*), sum(salary), avg(salary)
+        into nr_ang, suma_sal, venit_mediu
+        from employees;
+        DBMS_OUTPUT.PUT_LINE('Numarul angajatilor: ' || nr_ang);
+        DBMS_OUTPUT.PUT_LINE('Suma salariilor: ' || suma_sal);
+        DBMS_OUTPUT.PUT_LINE('Media salariilor: ' || venit_mediu);
+END;
+
+3. Modificați exercițiul anterior astfel încât să obțineți suma totală alocată lunar pentru plata salariilor și a comisioanelor 
+tuturor angajaților, iar pentru fiecare angajat cât la sută din această sumă câștigă lunar.
+
+set serveroutput on;
+DECLARE
+     suma number := 0;
+     sal employees.salary % type;
+     comm employees.commission_pct % type;
+     proc employees.salary % type;
+     CURSOR c is 
+            select salary, commission_pct
+            from employees e;
+BEGIN
+      --pentru fiecare job
+      OPEN c;
+      LOOP
+          FETCH c into sal, comm;
+          EXIT WHEN c % NOTFOUND;
+          IF comm is null then suma := suma + sal; 
+          ELSE suma := suma + sal + comm * sal; 
+          END IF;
+      END LOOP;
+      CLOSE c;
+      DBMS_OUTPUT.PUT_LINE('Suma totala alocata este: ' || suma);
+      DBMS_OUTPUT.PUT_LINE('');
+      
+      --procentajul salariului fiecarui angajat          
+      for c in (select salary * 100 / suma proc
+                from employees) LOOP
+            DBMS_OUTPUT.PUT_LINE('Procentaj salariu: ' || round(c.proc,2));
+      END LOOP;
+END;
+
+4. Modificați exercițiul anterior astfel încât să obțineți pentru fiecare job primii 5 angajați care câștigă cel mai mare salariu lunar. 
+Specificați dacă pentru un job sunt mai puțin de 5 angajați.
+
+set serveroutput on;
+DECLARE
+     nr NUMBER(4); 
+     ante_job jobs.job_title % type := ' ';
+     denumire jobs.job_title % type;
+     nume employees.first_name % type;
+     sal employees.salary % type;
+     CURSOR c is        
+            select first_name, job_title, salary
+            from employees e,jobs j
+            where e.job_id = j.job_id
+            order by 2 asc, 3 desc;
+BEGIN
+      --pentru fiecare job
+      OPEN c;
+      LOOP
+          FETCH c into nume, denumire, sal;
+          EXIT WHEN c % NOTFOUND;
+          IF ante_job <> denumire then  
+                                       IF nr < 5 and ante_job <> ' ' then DBMS_OUTPUT.PUT_LINE('Jobul ' || ante_job || ' are ' || nr || ' angajati'); 
+                                                                          DBMS_OUTPUT.PUT_LINE(' ');
+                                       END IF;
+                                       ante_job := denumire; 
+                                       nr := 0; 
+                                       DBMS_OUTPUT.PUT_LINE(ante_job);
+          END IF;
+          IF nr < 5 then DBMS_OUTPUT.PUT_LINE('    Top 5 salariati: ' || nume || ' ' || sal); END IF;
+          nr := nr + 1;
+      END LOOP;
+      CLOSE c;
+END;
+
+5. Modificați exercițiul anterior astfel încât să obțineți pentru fiecare job top 5 angajați. Dacă există mai mulți angajați care 
+respectă criteriul de selecție care au același salariu, atunci aceștia vor ocupa aceeași poziție în top 5.
+
+set serveroutput on;
+DECLARE
+     nr NUMBER(4); 
+     ante_job jobs.job_title % type := ' ';
+     denumire jobs.job_title % type;
+     nume employees.first_name % type;
+     sal employees.salary % type;
+     ante_sal employees.salary % type := 0;
+     CURSOR c is        
+            select first_name, job_title, salary
+            from employees e,jobs j
+            where e.job_id = j.job_id
+            order by 2 asc, 3 desc;
+BEGIN
+      --pentru fiecare job
+      OPEN c; 
+      LOOP
+          FETCH c into nume, denumire, sal;
+          EXIT WHEN c % NOTFOUND;
+          IF ante_job <> denumire then  
+                                       ante_job := denumire; 
+                                       nr := 1;
+                                       DBMS_OUTPUT.NEW_LINE; DBMS_OUTPUT.PUT(ante_job);
+          END IF;
+          IF nr <= 5 then 
+                          IF ante_sal = sal then nr := nr - 1; DBMS_OUTPUT.PUT('(' || nume || ' ' || sal || ') ');  END IF;
+                          IF ante_sal <> sal and nr <> 0 then DBMS_OUTPUT.NEW_LINE; DBMS_OUTPUT.PUT('    Locul ' || nr || ': (' || nume || ' ' || sal || ') '); ante_sal := sal; END IF;
+                           
+          END IF;
+          nr := nr + 1;
+      END LOOP;
+      CLOSE c;
+END;

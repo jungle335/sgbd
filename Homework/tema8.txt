@@ -1,0 +1,165 @@
+1. Definiţi un pachet care să permită gestiunea angajaţilor companiei. Pachetul va conţine:
+a. o procedură care determină adăugarea unui angajat, dându-se informaţii complete despre
+acesta:
+- codul angajatului va fi generat automat utilizându-se o secvenţă;
+- informaţiile personale vor fi date ca parametrii (nume, prenume, telefon, email);
+- data angajării va fi data curentă;
+- salariul va fi cel mai mic salariu din departamentul respectiv, pentru jobul respectiv (se
+vor obţine cu ajutorul unei funcţii stocate în pachet);
+- nu va avea comision;
+- codul managerului se va obţine cu ajutorul unei funcţii stocate în pachet care va avea ca
+parametrii numele şi prenumele managerului);
+- codul departamentului va fi obţinut cu ajutorul unei funcţii stocate în pachet, dându-se
+ca parametru numele acestuia;
+- codul jobului va fi obţinut cu ajutorul unei funcţii stocate în pachet, dându-se ca
+parametru numele acesteia.
+
+b. o procedură care determină mutarea în alt departament a unui angajat (se dau ca parametrii
+numele şi prenumele angajatului, respectiv numele departamentului, numele jobului şi
+numele şi prenumele managerului acestuia):
+- se vor actualiza informaţiile angajatului:
+- codul de departament (se va obţine cu ajutorul funcţiei corespunzătoare definită la
+punctul a);
+- codul jobului (se va obţine cu ajutorul funcţiei corespunzătoare definită la punctul
+a);
+- codul managerului (se va obţine cu ajutorul funcţiei corespunzătoare definită la
+punctul a);
+- salariul va fi cel mai mic salariu din noul departament, pentru noul job dacă acesta
+este mai mare decât salariul curent; altfel se va păstra salariul curent;
+- comisionul va fi cel mai mic comision din acel departament, pentru acel job;
+- data angajării va fi data curentă;
+- se vor înregistra informaţii corespunzătoare în istoricul joburilor.
+
+c. o funcţie care întoarce numărul de subalterni direcţi sau indirecţi ai unui angajat al cărui
+nume şi prenume sunt date ca parametrii;
+
+create or replace package myPack as
+  PROCEDURE addEmployee(nume employees.first_name % type, prenume employees.last_name % type, 
+                        telefon employees.phone_number % type, email employees.email % type);
+  --b)
+  PROCEDURE moveEmployee(nume employees.first_name % type, prenume employees.last_name % type, 
+                        dep departments.department_name % type, serv jobs.job_title % type,
+                        num_man employees.first_name % type, pren_man employees.last_name % type);
+  FUNCTION giveManCode(nume employees.first_name % type, prenume employees.last_name % type)
+        return NUMBER;
+  FUNCTION giveDepCode (dep departments.department_name % type)
+        return NUMBER;
+  FUNCTION giveJobCode(serv jobs.job_title % type)
+        return jobs.job_title % type;
+  --c)
+  FUNCTION nrSub(nume employees.first_name % type, prenume employees.last_name % type)
+        return NUMBER;
+  salariu number;
+  Idt number;
+  id_dep number;
+  id_job varchar2(10);
+  datas employees.hire_date % type;
+  TYPE vector IS VARRAY(400) OF VARCHAR2(120);
+  vect vector := vector();
+END myPack;
+/
+
+create or replace package body myPack as  
+       --a)
+       PROCEDURE addEmployee(nume employees.first_name % type, prenume employees.last_name % type, 
+                             telefon employees.phone_number % type, email employees.email % type) is
+       BEGIN
+             select max(employee_id)
+             into Idt
+             from employees;
+             
+             select min(salary)
+             into salariu 
+             from employees 
+             where department_id = myPack.giveDepCode('Executive') and job_id = myPack.giveJobCode('President');
+             
+             insert into emp_TMC values (Idt+1, nume, prenume, email, telefon, sysdate, myPack.giveJobCode('President'), salariu, 
+                                         null, myPack.giveManCode('Jennifer','Whalen'), myPack.giveDepCode('Executive'));
+       END addEmployee; 
+       
+       --b)
+       PROCEDURE moveEmployee(nume employees.first_name % type, prenume employees.last_name % type, 
+                              dep departments.department_name % type, serv jobs.job_title % type,
+                              num_man employees.first_name % type, pren_man employees.last_name % type) is
+       BEGIN
+            select min(salary)
+            into salariu 
+            from emp_TMC
+            where department_id = myPack.giveDepCode(dep) and job_id = myPack.giveJobCode(serv);
+            
+            select employee_id, hire_date, job_id, department_id
+            into Idt, datas, id_job, id_dep
+            from emp_TMC
+            where first_name = nume and last_name = prenume;
+            
+            insert into emp_job_history_TMC values (Idt, datas, sysdate, id_job, id_dep);
+            
+            update emp_TMC
+            set department_id = myPack.giveDepCode(dep), job_id = myPack.giveJobCode(serv), manager_id = giveManCode(num_man, pren_man), hire_date = sysdate,
+            salary = (case when salariu > salary then salariu else salary end), commission_pct = (select min(commission_pct)
+                                                                                                  from employees
+                                                                                                  where department_id = myPack.giveDepCode(dep) and job_id = myPack.giveJobCode(serv))    
+            where first_name = nume and last_name = prenume;
+            
+       END moveEmployee;
+       
+       --c)
+         FUNCTION nrSub(nume employees.first_name % type, prenume employees.last_name % type)
+            return NUMBER IS nr NUMBER;
+            BEGIN
+                  select 'x'
+                  bulk collect into vect
+                  from employees
+                  start with manager_id = giveManCode(nume, prenume) 
+                  connect by prior employee_id = manager_id;
+                  nr := vect.count();
+            RETURN nr;
+            END nrSub;
+      
+       FUNCTION giveManCode(nume employees.first_name % type, prenume employees.last_name % type)
+        return NUMBER is code NUMBER;
+        
+        BEGIN
+          select employee_id
+          into code
+          from employees
+          where first_name = nume and last_name = prenume and rownum < 2;
+        RETURN code;
+        EXCEPTION 
+            WHEN NO_DATA_FOUND THEN DBMS_OUTPUT.PUT_LINE('Nu exista niciun manager cu numele specificat'); 
+        END giveManCode;
+        
+      FUNCTION giveDepCode (dep departments.department_name % type)
+        return NUMBER is code NUMBER;
+      BEGIN
+        select department_id
+        into code
+        from departments
+        where department_name = dep and rownum < 2;
+      RETURN code;
+      EXCEPTION 
+            WHEN NO_DATA_FOUND THEN DBMS_OUTPUT.PUT_LINE('Nu exista niciun departament cu numele specificat'); 
+      END giveDepCode;
+      
+      FUNCTION giveJobCode(serv jobs.job_title % type)
+        return jobs.job_title % type is code jobs.job_title % type;
+      BEGIN
+        select job_id
+        into code
+        from jobs
+        where job_title = serv and rownum < 2;
+      RETURN code;
+      
+      EXCEPTION 
+            WHEN NO_DATA_FOUND THEN DBMS_OUTPUT.PUT_LINE('Nu exista niciun job cu numele specificat'); 
+      END giveJobCode;
+end myPack;
+/
+
+set serveroutput on;
+BEGIN
+    --myPack.addEmployee('Peter', 'Wallace', '312.456.1237', 'PWALL');
+      myPack.moveEmployee('Peter', 'Wallace', 'Sales', 'Sales Representative', 'John', 'Russell');
+    --DBMS_OUTPUT.PUT_LINE(myPack.nrSub('Steven', 'King'));
+END;
+/

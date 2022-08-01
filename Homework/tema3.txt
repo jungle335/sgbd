@@ -1,0 +1,147 @@
+1. Se dă următorul bloc:
+
+DECLARE 
+  numar number(3) := 100;   
+  mesaj1 varchar2(255) := 'text 1';  
+  mesaj2 varchar2(255) := 'text 2';  
+BEGIN 
+    DECLARE 
+      numar number(3) := 1;
+      mesaj1 varchar2(255) := 'text 2';  
+      mesaj2 varchar2(255) := 'text 3'; 
+    BEGIN 
+      numar := numar+1; 
+      mesaj2 := mesaj2 || ' adaugat in sub-bloc';
+    END; 
+  numar := numar+1; 
+  mesaj1 := mesaj1 || ' adaugat in blocul principal'; 
+  mesaj2 := mesaj2 || ' adaugat in blocul principal'; 
+END;
+
+a) Variabila numar are valoarea 2
+b) Variabila mesaj1 are valoarea text2
+c) Variabila mesaj2 are valoarea text 3 adaugat in sub-bloc
+d) Variabila numar are valoarea 101
+e) Variabila mesaj1 are valoarea text 1 adaugat in blocul principal
+f) Variabila mesaj2 are valoarea text 2 adaugat in blocul principal
+
+2. Se dă următorul enunț: Pentru fiecare zi a lunii octombrie (se vor lua în considerare și zilele din lună în care 
+nu au fost realizate împrumuturi) obțineți numărul de împrumuturi efectuate.
+a. Încercați să rezolvați problema în SQL fără a folosi structuri ajutătoare.
+
+with daysInOctober as (
+    select trunc(sysdate, 'mm') + rownum - 1 one
+    from dual connect by rownum <= to_number(to_char(last_day(sysdate), 'dd')))
+select one,case
+              when one in (select distinct to_date(book_date,'dd-mm-yy') from rental) then (select count(one) from rental where one=to_date(book_date,'dd-mm-yy') group by one)
+              else 0                                                                                
+            end "Numar_Imprumuturi"
+from daysInOctober;
+
+b. Definiți tabelul octombrie_*** (id, data). Folosind PL/SQL populați cu date acest tabel. Rezolvați în SQL problema dată.
+
+create table octombrie_TMC(
+    Id int,
+    Data varchar(255)
+);
+
+DECLARE
+    contor number(3) := 0;
+    aDay rental.book_date%type;
+BEGIN
+    WHILE contor < round(to_number(last_day(sysdate) - trunc(sysdate,'mm'))) LOOP
+      aDay := last_day(sysdate) - contor;
+      contor := contor + 1;
+      insert into octombrie_TMC values (contor,aDay);
+    END LOOP;
+END;
+
+select data,case
+              when data in (select distinct to_date(book_date,'dd-mm-yy') from rental) then (select count(data) from rental where data=to_date(book_date,'dd-mm-yy') group by data)
+              else 0                                                                                
+            end "Numar_Imprumuturi"
+from octombrie_TMC;
+
+3. Definiți un bloc anonim în care să se determine numărul de filme (titluri) împrumutate de un membru al cărui nume este introdus de la tastatură. Tratați următoarele două situații: nu există nici un membru cu nume dat; există mai mulți membrii cu același nume.
+
+DECLARE
+  nume varchar(255) := '&m_nume';
+  numar_filme number(3);
+BEGIN
+  select count(r.member_id)
+  into numar_filme
+  from member m,rental r
+  where m.member_id=r.member_id and last_name = nume
+  group by r.member_id;
+  DBMS_OUTPUT.PUT_LINE(nume || ' ' || numar_filme);
+  EXCEPTION
+      when no_data_found then DBMS_OUTPUT.PUT_LINE('Nu exista niciun membru cu numele introdus');
+      when too_many_rows then DBMS_OUTPUT.PUT_LINE('Exista mai multi membrii cu acelasi nume');
+END;
+
+4. Modificați problema anterioară astfel încât să afișați și următorul text:
+- Categoria 1 (a împrumutat mai mult de 75% din titlurile existente)
+- Categoria 2 (a împrumutat mai mult de 50% din titlurile existente)
+- Categoria 3 (a împrumutat mai mult de 25% din titlurile existente)
+- Categoria 4 (altfel)
+
+DECLARE
+  nume varchar(255) := '&m_nume';
+  numar_filme number(3);
+  imprumutate number(3);
+BEGIN
+  select count(*)
+  into imprumutate
+  from rental;
+  select count(r.member_id)
+  into numar_filme
+  from member m,rental r
+  where m.member_id=r.member_id and last_name = nume
+  group by r.member_id;
+  case
+    when numar_filme > 0.75 * imprumutate then DBMS_OUTPUT.PUT_LINE(nume || ' a imprumutat mai mult de 75% din titlurile existente');
+    when numar_filme > 0.5 * imprumutate then  DBMS_OUTPUT.PUT_LINE(nume || ' a imprumutat mai mult de 50% din titlurile existente');
+    when numar_filme > 0.25 * imprumutate then  DBMS_OUTPUT.PUT_LINE(nume || ' a imprumutat mai mult de 25% din titlurile existente');
+    else DBMS_OUTPUT.PUT_LINE(nume || ' a imprumutat putin');
+  end case;
+  EXCEPTION
+      when no_data_found then DBMS_OUTPUT.PUT_LINE('Nu exista niciun membru cu numele introdus');
+      when too_many_rows then DBMS_OUTPUT.PUT_LINE('Exista mai multi membrii cu acelasi nume');
+END;
+
+5. Creați tabelul member_*** (o copie a tabelului member). Adăugați în acest tabel coloana discount, care va reprezenta procentul de reducere aplicat pentru membrii, în funcție de 
+categoria din care fac parte aceștia:
+- 10% pentru membrii din Categoria 1
+- 5% pentru membrii din Categoria 2
+- 3% pentru membrii din Categoria 3
+- nimic
+Actualizați coloana discount pentru un membru al cărui cod este dat de la tastatură. Afișați un mesaj din care să reiasă dacă actualizarea s-a produs sau nu.
+
+create table member_TMC as (select * from member);
+alter table member_TMC
+add discount number(3);
+
+DECLARE
+    cod number(3) := '&m_cod';
+    numar_filme number(3);
+    imprumutate number(3);
+BEGIN
+    select count(*)
+    into imprumutate
+    from rental;
+    select count(*)
+    into numar_filme
+    from rental
+    where member_id=cod;
+    update member_TMC
+    set discount = case
+                      when numar_filme > 0.75 * imprumutate then 10
+                      when numar_filme > 0.5 * imprumutate then 5
+                      when numar_filme > 0.25 * imprumutate then 3
+                      else 0
+                  end
+    where member_id=cod;
+    IF SQL%ROWCOUNT = 0 then DBMS_OUTPUT.PUT_LINE('Nu s-a actualizat nimic');
+    else DBMS_OUTPUT.PUT_LINE('Actualizare reusita');
+    END IF;
+END;
